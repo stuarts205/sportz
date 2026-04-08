@@ -14,15 +14,15 @@ const MAX_LIMIT = 100;
 export const matchRouter = Router();
 
 matchRouter.get("/", async (req, res) => {
-  const paredResult = listMatchesQuerySchema.safeParse(req.query);
-  if (!paredResult.success) {
+  const parsedResult = listMatchesQuerySchema.safeParse(req.query);
+  if (!parsedResult.success) {
     return res.status(400).json({
       error: "Invalid query parameters",
-      details: JSON.stringify(paredResult.error),
+      details: parsedResult.error.issues,
     });
   }
 
-  const limit = Math.min(paredResult.data.limit ?? 20, MAX_LIMIT);
+  const limit = Math.min(parsedResult.data.limit ?? 20, MAX_LIMIT);
 
   try {
     const data = await db
@@ -37,22 +37,24 @@ matchRouter.get("/", async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       error: "Failed to fetch matches",
-      details: JSON.stringify(error),
+      details: error.message.issues,
     });
-  } 
+  }
 });
 
 matchRouter.post("/", async (req, res) => {
   const parseResult = createMatchSchema.safeParse(req.body);
-  const {
-    data: { startTime, endTime, homeScore, awayScore },
-  } = parseResult;
+
   if (!parseResult.success) {
     return res.status(400).json({
       error: "Invalid payload",
-      details: JSON.stringify(parseResult.error),
+      details: parseResult.error.issues,
     });
   }
+
+  const {
+    data: { startTime, endTime, homeScore, awayScore },
+  } = parseResult;
 
   try {
     const [event] = await db
@@ -67,15 +69,17 @@ matchRouter.post("/", async (req, res) => {
       })
       .returning();
 
+      if(res.app.locals.broadcastMatchCreated){
+        res.app.locals.broadcastMatchCreated(event);
+      }
+
     res.status(201).json({
       data: event,
     });
   } catch (error) {
-    return res
-      .status(500)
-      .json({
-        error: "Failed to create match",
-        details: JSON.stringify(error),
-      });
+    return res.status(500).json({
+      error: "Failed to create match",
+      details: error.message.issues,
+    });
   }
 });
